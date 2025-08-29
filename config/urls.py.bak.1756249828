@@ -1,0 +1,42 @@
+from django.contrib import admin
+from django.urls import path, include
+from .views import home
+
+urlpatterns = [
+    path('accounts/', include('django.contrib.auth.urls')),
+
+    path('billing/', include('apps.billing.urls')),
+    path('chart/', include('apps.chart.urls')),
+    path('fhir/', include('apps.fhir_api.urls')),
+
+    path('claims/', include('apps.claims.urls')),
+    path('patients/', include('apps.patients.urls')),
+    path("admin/", admin.site.urls),
+    path("", home, name="home"),
+]
+
+# Optional app urls (import if available)
+try:
+    import apps.patients.urls  # type: ignore
+    urlpatterns += [path("patients/", include("apps.patients.urls"))]
+except Exception:
+    pass
+
+try:
+    import apps.claims.urls  # type: ignore
+    urlpatterns += [path("claims/", include("apps.claims.urls"))]
+except Exception:
+    pass
+
+try:
+    import apps.api.urls  # type: ignore
+    urlpatterns += [path("api/", include("apps.api.urls"))]
+except Exception:
+    pass
+
+# FHIR routes (if present)
+try:
+    import apps.fhir_api.urls  # type: ignore
+    urlpatterns += [path("fhir/", include("apps.fhir_api.urls"))]
+except Exception:
+    pass

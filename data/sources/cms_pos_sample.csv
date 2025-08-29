@@ -1,0 +1,8 @@
+POS Code,Place of Service Name,Place of Service Description
+11,Office,Location where the health professional routinely provides health examinations, diagnosis, and treatment.
+12,Home,Patient's private residence.
+24,Ambulatory Surgical Center,Freestanding facility for surgical procedures.
+31,Skilled Nursing Facility,Facility providing skilled nursing and rehabilitative care.
+32,Nursing Facility,Facility for custodial care and services.
+34,Hospice,Facility for hospice care.
+22,On Campus-Outpatient Hospital,Outpatient department of a hospital on campus.

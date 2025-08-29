@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Denial {{ denial.id }} • Claim {{ denial.claim_id }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; color: #111; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 18px; max-width: 860px; }
+    .muted { color:#6b7280; }
+    .pill { display:inline-block; border-radius:999px; padding:4px 10px; background:#f3f4f6; font-size:12px; }
+    .timeline { margin-top: 18px; border-left: 2px solid #e5e7eb; padding-left: 16px; }
+    .item { margin: 14px 0; position: relative; }
+    .item::before { content:""; position:absolute; left:-11px; top:4px; width:10px; height:10px; background:#111; border-radius:999px; }
+    .note { white-space: pre-wrap; background:#f9fafb; padding:8px; border-radius:8px; border:1px solid #e5e7eb; }
+    .hdr { display:flex; gap:10px; align-items:center; margin-bottom: 10px; }
+    a { color:#2563eb; text-decoration:none; } a:hover{ text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="hdr">
+      <h2 style="margin:0;">Denial {{ denial.id }}</h2>
+      <span class="pill">{{ denial.status }}</span>
+    </div>
+    <div class="muted">Claim ID: {{ denial.claim_id }}{% if denial.reason %} • Reason: {{ denial.reason }}{% endif %}</div>
+
+    <h3 style="margin:18px 0 10px;">Status history</h3>
+    {% if history %}
+      <div class="timeline">
+        {% for h in history %}
+          <div class="item">
+            <div><strong>{{ h.to_status }}</strong> <span class="muted">from {{ h.from_status|default:"—" }} • {{ h.created_at|date:"Y-m-d H:i" }}</span></div>
+            {% if h.note %}<div class="note">{{ h.note }}</div>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="muted">No history yet.</div>
+    {% endif %}
+    <div style="margin-top:16px;">
+      <a href="/portal/">← Back to portal</a>
+    </div>
+  </div>
+</body>
+</html>

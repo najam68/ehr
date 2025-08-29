@@ -1,0 +1,17 @@
+- model: clinical_directory.specialty
+  pk: cardiology
+  fields: { title: "Cardiology", slug: "cardiology", nucc_code: "207RC0000X", synonyms: ["heart"] }
+- model: clinical_directory.specialty
+  pk: interventional-cardiology
+  fields: { title: "Interventional Cardiology", slug: "interventional-cardiology", parent: cardiology, nucc_code: "207RI0011X" }
+- model: clinical_directory.specialty
+  pk: geriatrics
+  fields: { title: "Geriatrics", slug: "geriatrics", nucc_code: "207QG0300X" }
+- model: clinical_directory.specialty
+  pk: psychiatry
+  fields: { title: "Psychiatry", slug: "psychiatry", nucc_code: "2084P0800X" }
+- model: clinical_directory.specialty
+  pk: ob-gyn
+  fields: { title: "OB/GYN", slug: "ob-gyn", nucc_code: "207V00000X" }
+
+# provenance: NUCC taxonomy (codes provided for reference; verify current codes before production).

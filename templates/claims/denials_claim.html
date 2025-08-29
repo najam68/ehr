@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Claim {{ claim_id }} — Denials</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; color: #111; }
+    .wrap { max-width: 900px; }
+    h2 { margin: 0 0 12px; }
+    .muted { color:#6b7280; }
+    .row { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border:1px solid #e5e7eb; border-radius:10px; margin:10px 0; }
+    .pill { display:inline-block; border-radius:999px; padding:4px 10px; background:#f3f4f6; font-size:12px; }
+    .note { color:#374151; }
+    .hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:12px; }
+    form { display:flex; gap:8px; align-items:center; }
+    input, select { padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; }
+    button { padding:6px 10px; border:1px solid #e5e7eb; background:#fafafa; border-radius:8px; cursor:pointer; }
+    a { color:#2563eb; text-decoration:none; } a:hover{ text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hdr">
+      <h2>Claim {{ claim_id }} — Denials</h2>
+      <form method="get">
+        <label class="muted">Status</label>
+        <select name="status">
+          <option value="">All</option>
+          {% for s in allowed_statuses %}
+            <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Filter</button>
+      </form>
+    </div>
+
+    {% if denials %}
+      {% for d in denials %}
+        <div class="row">
+          <div>
+            <div>
+              <span class="pill">{{ d.status }}</span>
+              <strong style="margin-left:8px;">Denial #{{ d.id }}</strong>
+            </div>
+            {% if d.latest_note %}
+              <div class="note muted">Latest: {{ d.latest_status }} — {{ d.latest_note }} ({{ d.latest_at|date:"Y-m-d H:i" }})</div>
+            {% endif %}
+          </div>
+          <div>
+            <a href="/claims/denials/{{ d.id }}/">View detail →</a>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted">No denials found for this claim.</p>
+    {% endif %}
+
+    <div style="margin-top:12px;">
+      <a href="/portal/">← Back to portal</a>
+    </div>
+  </div>
+</body>
+</html>

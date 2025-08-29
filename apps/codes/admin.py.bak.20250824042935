@@ -1,0 +1,13 @@
+from django.contrib import admin
+from .models import CodeSystem, Code
+
+@admin.register(CodeSystem)
+class CodeSystemAdmin(admin.ModelAdmin):
+    list_display = ("slug", "name", "version", "source_url")
+    search_fields = ("slug", "name", "version")
+
+@admin.register(Code)
+class CodeAdmin(admin.ModelAdmin):
+    list_display = ("code", "display", "system")
+    search_fields = ("code", "display")
+    list_filter = ("system",)

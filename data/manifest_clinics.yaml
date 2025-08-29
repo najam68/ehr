@@ -1,0 +1,17 @@
+datasets:
+  - id: clinic_directory_seed
+    description: "Seed clinic directory (demo only)"
+    source:
+      system: "Seed"
+      url: "N/A"
+      local_path: "data/sources/clinics_sample.csv"
+    format: "CSV"
+    target:
+      app: "clinical_directory"
+      model: "Clinic"
+      key_fields: ["slug"]
+      mapping:
+        name: "Name"
+        slug: "Slug"
+        website: "Website"
+        care_setting_id: "Care Setting Slug"   # FK by slug (string PK)

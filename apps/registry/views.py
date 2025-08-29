@@ -1,0 +1,844 @@
+from apps.audit.utils import log_event
+from django.http import HttpResponseRedirect, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.contrib.auth.decorators import login_required
+
+from apps.patients.models import Patient
+from .models import PatientProfile, Coverage, EmergencyContact, Payer
+
+def _wrap(title, body):
+    return HttpResponse(
+        "<!doctype html><html><head>"
+        "<meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<link href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css' rel='stylesheet'>"
+        "<title>" + title + "</title></head><body class='bg-light'>"
+        "<div class='container py-4'><h1 class='h4 mb-3'>" + title + "</h1>" + body + "</div></body></html>"
+    )
+
+@login_required
+def patient_registry_summary(request, patient_id: int):
+    try:
+        p = Patient.objects.get(pk=patient_id)
+    except Patient.DoesNotExist:
+        return _wrap("Registry Summary", "<div class='alert alert-danger'>Patient not found.</div>")
+    prof = PatientProfile.objects.filter(patient=p).first()
+    covs = Coverage.objects.filter(patient=p).order_by('priority', '-is_primary', 'id')[:20]
+    ecs = EmergencyContact.objects.filter(patient=p).order_by('priority','id')[:10]
+
+    def row(key, val): 
+        return "<tr><th class='text-nowrap pe-3'>" + key + "</th><td>" + val + "</td></tr>"
+
+    profile_table = "<div class='alert alert-warning'>No profile yet.</div>"
+    if prof:
+        profile_table = (
+            "<div class='table-responsive'><table class='table table-sm'><tbody>"
+            + row("MRN", prof.mrn or "")
+            + row("SSN", prof.ssn or "")
+            + row("Marital", prof.marital_status or "")
+            + row("Employment", prof.employment_status or "")
+            + row("Portal", "Enrolled" if prof.portal_enrolled else "Not enrolled")
+            + row("PCP", str(prof.primary_care_provider) if prof.primary_care_provider_id else "")
+            + "</tbody></table></div>"
+        )
+
+    cov_rows = []
+    for c in covs:
+        cov_rows.append(
+            "<tr><td>" + str(c.id) + "</td><td>" + str(c.payer) + "</td><td>" + (c.member_id or "") + "</td><td>"
+            + ("Yes" if c.is_primary else "No") + "</td>"
+            + "<td><a href='/registry/coverage/" + str(c.id) + "/edit/'>Edit</a> | <a href='/registry/coverage/{c.id}/eligibility/check'>Check</a></td></tr>"
+        )
+    cov_table = (
+        "<div class='table-responsive'><table class='table table-sm table-striped'>"
+        "<thead><tr><th>ID</th><th>Payer</th><th>Member ID</th><th>Primary</th><th></th></tr></thead>"
+        "<tbody>" + ("".join(cov_rows) or "<tr><td colspan='5' class='text-muted'>No coverage on file.</td></tr>") + "</tbody></table></div>"
+    )
+
+    ec_rows = []
+    for ec in ecs:
+        ec_rows.append("<tr><td>" + (ec.name or "") + "</td><td>" + (ec.relationship or "") + "</td><td>" + (ec.phone or "") + "</td><td>" + str(ec.priority) + "</td></tr>")
+    ec_table = (
+        "<div class='table-responsive'><table class='table table-sm table-striped'>"
+        "<thead><tr><th>Name</th><th>Relation</th><th>Phone</th><th>Priority</th></tr></thead>"
+        "<tbody>" + ("".join(ec_rows) or "<tr><td colspan='4' class='text-muted'>No contacts.</td></tr>") + "</tbody></table></div>"
+    )
+
+    body = (
+        "<div class='mb-3'><b>Patient:</b> " + p.last_name + ", " + p.first_name + " (#" + str(p.id) + ")</div>"
+        "<div class='row g-3'>"
+        "<div class='col-md-6'><div class='card shadow-sm'><div class='card-body'>"
+        "<h2 class='h6'>Profile</h2>" + profile_table +
+        "<a class='btn btn-sm btn-primary' href='/registry/patient/" + str(p.id) + "/profile/edit/'>Edit Profile</a>"
+        "</div></div></div>"
+        "<div class='col-md-6'><div class='card shadow-sm'><div class='card-body'>"
+        "<h2 class='h6'>Coverage</h2>" + cov_table +
+        "<a class='btn btn-sm btn-primary' href='/registry/patient/" + str(p.id) + "/coverage/new/'>Add Coverage</a>"
+        "</div></div></div>"
+        "<div class='col-md-6'><div class='card shadow-sm mt-3'><div class='card-body'>"
+        "<h2 class='h6'>Emergency Contacts</h2>" + ec_table +
+        "<a class='btn btn-sm btn-primary' href='/registry/patient/" + str(p.id) + "/contact/new/'>Add Contact</a>"
+        "</div></div></div>"
+        "</div>"
+    )
+    return _wrap("Registry Summary", body)
+
+@csrf_exempt
+@login_required
+def edit_patient_profile(request, patient_id: int):
+    try:
+        p = Patient.objects.get(pk=patient_id)
+    except Patient.DoesNotExist:
+        return _wrap("Edit Profile", "<div class='alert alert-danger'>Patient not found.</div>")
+    prof = PatientProfile.objects.filter(patient=p).first() or PatientProfile(patient=p)
+
+    if request.method == "POST":
+        prof.mrn = (request.POST.get("mrn") or "").strip()
+        prof.ssn = (request.POST.get("ssn") or "").strip()
+        prof.marital_status = (request.POST.get("marital_status") or prof.marital_status).strip() or "U"
+        prof.employment_status = (request.POST.get("employment_status") or prof.employment_status).strip() or "UNK"
+        prof.portal_enrolled = True if request.POST.get("portal_enrolled") == "on" else False
+        prof.preferred_language = (request.POST.get("preferred_language") or "").strip()
+        prof.preferred_pharmacy = (request.POST.get("preferred_pharmacy") or "").strip()
+        prof.save()
+        return HttpResponseRedirect("/registry/patient/" + str(p.id) + "/")
+
+    def val(x): return "" if x is None else str(x)
+
+    form = (
+        "<form method='post'>"
+        "<div class='row g-2'>"
+        "<div class='col-md-6'><label class='form-label'>MRN</label>"
+        "<input name='mrn' class='form-control' value='" + val(prof.mrn) + "'></div>"
+        "<div class='col-md-6'><label class='form-label'>SSN</label>"
+        "<input name='ssn' class='form-control' value='" + val(prof.ssn) + "'></div>"
+        "<div class='col-md-6'><label class='form-label'>Marital Status (S/M/D/W/P/U)</label>"
+        "<input name='marital_status' class='form-control' value='" + val(prof.marital_status) + "'></div>"
+        "<div class='col-md-6'><label class='form-label'>Employment Status (FT/PT/UNEMP/RET/STUD/UNK)</label>"
+        "<input name='employment_status' class='form-control' value='" + val(prof.employment_status) + "'></div>"
+        "<div class='col-md-6 form-check mt-4'>"
+        "<input class='form-check-input' type='checkbox' name='portal_enrolled' " + ("checked" if prof.portal_enrolled else "") + ">"
+        "<label class='form-check-label'>Portal Enrolled</label>"
+        "</div>"
+        "<div class='col-md-6'><label class='form-label'>Preferred Language</label>"
+        "<input name='preferred_language' class='form-control' value='" + val(prof.preferred_language) + "'></div>"
+        "<div class='col-md-12'><label class='form-label'>Preferred Pharmacy</label>"
+        "<input name='preferred_pharmacy' class='form-control' value='" + val(prof.preferred_pharmacy) + "'></div>"
+        "</div>"
+        "<div class='mt-3'>"
+        "<button class='btn btn-primary'>Save Profile</button>"
+        "<a class='btn btn-secondary ms-2' href='/registry/patient/" + str(p.id) + "/'>Cancel</a>"
+        "</div>"
+        "</form>"
+    )
+    return _wrap("Edit Patient Profile", form)
+
+@login_required
+def new_coverage(request, patient_id: int):
+    try:
+        p = Patient.objects.get(pk=patient_id)
+    except Patient.DoesNotExist:
+        return _wrap("New Coverage", "<div class='alert alert-danger'>Patient not found.</div>")
+
+    if request.method == "POST":
+        def _num(name, default="0"):
+            raw = (request.POST.get(name) or default).strip()
+            try: return float(raw)
+            except Exception: return float(default)
+
+        payer_id = (request.POST.get("payer_id") or "").strip()
+        payer = Payer.objects.filter(pk=payer_id).first()
+        if not payer:
+            return _wrap("New Coverage", "<div class='alert alert-danger'>Payer not found (use a valid Payer ID).</div>")
+
+        cov = Coverage.objects.create(
+            patient=p,
+            payer=payer,
+            plan_name=(request.POST.get("plan_name") or "").strip(),
+            member_id=(request.POST.get("member_id") or "").strip(),
+            group_number=(request.POST.get("group_number") or "").strip(),
+            relationship=(request.POST.get("relationship") or "self").strip() or "self",
+            subscriber_name=(request.POST.get("subscriber_name") or "").strip(),
+            is_primary=True if request.POST.get("is_primary") == "on" else False,
+            priority=int((request.POST.get("priority") or "1").strip() or "1"),
+            copay=_num("copay","0"),
+            coinsurance_percent=_num("coinsurance_percent","0"),
+            deductible=_num("deductible","0"),
+            oop_max=_num("oop_max","0"),
+        )
+        return HttpResponseRedirect("/registry/patient/" + str(p.id) + "/")
+
+    form = (
+        "<form method='post'>"
+        "<div class='row g-2'>"
+        "<div class='col-md-3'><label class='form-label'>Payer ID</label>"
+        "<input name='payer_id' class='form-control' placeholder='e.g., 1'></div>"
+        "<div class='col-md-5'><label class='form-label'>Plan Name</label>"
+        "<input name='plan_name' class='form-control'></div>"
+        "<div class='col-md-4'><label class='form-label'>Member ID</label>"
+        "<input name='member_id' class='form-control'></div>"
+        "<div class='col-md-4'><label class='form-label'>Group #</label>"
+        "<input name='group_number' class='form-control'></div>"
+        "<div class='col-md-4'><label class='form-label'>Relationship</label>"
+        "<input name='relationship' class='form-control' placeholder='self/spouse/child/other' value='self'></div>"
+        "<div class='col-md-4'><label class='form-label'>Subscriber Name</label>"
+        "<input name='subscriber_name' class='form-control'></div>"
+        "<div class='col-md-2 form-check mt-4'>"
+        "<input class='form-check-input' type='checkbox' name='is_primary' checked>"
+        "<label class='form-check-label'>Primary</label>"
+        "</div>"
+        "<div class='col-md-2'><label class='form-label'>Priority</label>"
+        "<input name='priority' class='form-control' value='1'></div>"
+        "<div class='col-md-2'><label class='form-label'>Copay</label>"
+        "<input name='copay' class='form-control' value='0.00'></div>"
+        "<div class='col-md-3'><label class='form-label'>Coinsurance %</label>"
+        "<input name='coinsurance_percent' class='form-control' value='0'></div>"
+        "<div class='col-md-3'><label class='form-label'>Deductible</label>"
+        "<input name='deductible' class='form-control' value='0.00'></div>"
+        "<div class='col-md-2'><label class='form-label'>OOP Max</label>"
+        "<input name='oop_max' class='form-control' value='0.00'></div>"
+        "</div>"
+        "<div class='mt-3'>"
+        "<button class='btn btn-primary'>Save Coverage</button>"
+        "<a class='btn btn-secondary ms-2' href='/registry/patient/" + str(patient_id) + "/'>Cancel</a>"
+        "</div>"
+        "</form>"
+    )
+    return _wrap("New Coverage", form)
+
+@login_required
+def edit_coverage(request, coverage_id: int):
+    cov = Coverage.objects.filter(pk=coverage_id).select_related("patient","payer").first()
+    if not cov:
+        return _wrap("Edit Coverage", "<div class='alert alert-danger'>Coverage not found.</div>")
+
+    if request.method == "POST":
+        def _num(name, default="0"):
+            raw = (request.POST.get(name) or default).strip()
+            try: return float(raw)
+            except Exception: return float(default)
+        cov.plan_name = (request.POST.get("plan_name") or "").strip()
+        cov.member_id = (request.POST.get("member_id") or "").strip()
+        cov.group_number = (request.POST.get("group_number") or "").strip()
+        cov.relationship = (request.POST.get("relationship") or "self").strip() or "self"
+        cov.subscriber_name = (request.POST.get("subscriber_name") or "").strip()
+        cov.is_primary = True if request.POST.get("is_primary") == "on" else False
+        cov.priority = int((request.POST.get("priority") or "1").strip() or "1")
+        cov.copay = _num("copay","0")
+        cov.coinsurance_percent = _num("coinsurance_percent","0")
+        cov.deductible = _num("deductible","0")
+        cov.oop_max = _num("oop_max","0")
+        cov.save()
+        return HttpResponseRedirect("/registry/patient/" + str(cov.patient_id) + "/")
+
+    def val(x): return "" if x is None else str(x)
+
+    form = (
+        "<form method='post'>"
+        "<div class='row g-2'>"
+        "<div class='col-md-5'><label class='form-label'>Plan Name</label>"
+        "<input name='plan_name' class='form-control' value='" + val(cov.plan_name) + "'></div>"
+        "<div class='col-md-4'><label class='form-label'>Member ID</label>"
+        "<input name='member_id' class='form-control' value='" + val(cov.member_id) + "'></div>"
+        "<div class='col-md-3'><label class='form-label'>Group #</label>"
+        "<input name='group_number' class='form-control' value='" + val(cov.group_number) + "'></div>"
+        "<div class='col-md-4'><label class='form-label'>Relationship</label>"
+        "<input name='relationship' class='form-control' value='" + val(cov.relationship) + "'></div>"
+        "<div class='col-md-4'><label class='form-label'>Subscriber Name</label>"
+        "<input name='subscriber_name' class='form-control' value='" + val(cov.subscriber_name) + "'></div>"
+        "<div class='col-md-2 form-check mt-4'>"
+        "<input class='form-check-input' type='checkbox' name='is_primary' " + ("checked" if cov.is_primary else "") + ">"
+        "<label class='form-check-label'>Primary</label>"
+        "</div>"
+        "<div class='col-md-2'><label class='form-label'>Priority</label>"
+        "<input name='priority' class='form-control' value='" + val(cov.priority) + "'></div>"
+        "<div class='col-md-2'><label class='form-label'>Copay</label>"
+        "<input name='copay' class='form-control' value='" + val(cov.copay) + "'></div>"
+        "<div class='col-md-3'><label class='form-label'>Coinsurance %</label>"
+        "<input name='coinsurance_percent' class='form-control' value='" + val(cov.coinsurance_percent) + "'></div>"
+        "<div class='col-md-3'><label class='form-label'>Deductible</label>"
+        "<input name='deductible' class='form-control' value='" + val(cov.deductible) + "'></div>"
+        "<div class='col-md-2'><label class='form-label'>OOP Max</label>"
+        "<input name='oop_max' class='form-control' value='" + val(cov.oop_max) + "'></div>"
+        "</div>"
+        "<div class='mt-3'>"
+        "<button class='btn btn-primary'>Save</button>"
+        "<a class='btn btn-secondary ms-2' href='/registry/patient/" + str(cov.patient_id) + "/'>Cancel</a>"
+        "</div>"
+        "</form>"
+    )
+    return _wrap("Edit Coverage", form)
+
+@csrf_exempt
+@login_required
+def new_emergency_contact(request, patient_id: int):
+    try:
+        p = Patient.objects.get(pk=patient_id)
+    except Patient.DoesNotExist:
+        return _wrap("New Contact", "<div class='alert alert-danger'>Patient not found.</div>")
+
+    if request.method == "POST":
+        addr = {
+            "street": (request.POST.get("street") or "").strip(),
+            "city": (request.POST.get("city") or "").strip(),
+            "state": (request.POST.get("state") or "").strip(),
+            "postal_code": (request.POST.get("postal_code") or "").strip(),
+        }
+        EmergencyContact.objects.create(
+            patient=p,
+            name=(request.POST.get("name") or "").strip(),
+            relationship=(request.POST.get("relationship") or "").strip(),
+            phone=(request.POST.get("phone") or "").strip(),
+            alt_phone=(request.POST.get("alt_phone") or "").strip(),
+            address_json=addr if any(addr.values()) else {},
+            priority=int((request.POST.get("priority") or "1").strip() or "1"),
+        )
+        return HttpResponseRedirect("/registry/patient/" + str(p.id) + "/")
+
+    form = (
+        "<form method='post'>"
+        "<div class='row g-2'>"
+        "<div class='col-md-6'><label class='form-label'>Name</label>"
+        "<input name='name' class='form-control'></div>"
+        "<div class='col-md-3'><label class='form-label'>Relationship</label>"
+        "<input name='relationship' class='form-control'></div>"
+        "<div class='col-md-3'><label class='form-label'>Priority</label>"
+        "<input name='priority' class='form-control' value='1'></div>"
+        "<div class='col-md-6'><label class='form-label'>Phone</label>"
+        "<input name='phone' class='form-control'></div>"
+        "<div class='col-md-6'><label class='form-label'>Alt Phone</label>"
+        "<input name='alt_phone' class='form-control'></div>"
+        "<div class='col-md-6'><label class='form-label'>Street</label>"
+        "<input name='street' class='form-control'></div>"
+        "<div class='col-md-3'><label class='form-label'>City</label>"
+        "<input name='city' class='form-control'></div>"
+        "<div class='col-md-3'><label class='form-label'>State</label>"
+        "<input name='state' class='form-control'></div>"
+        "<div class='col-md-3'><label class='form-label'>Postal Code</label>"
+        "<input name='postal_code' class='form-control'></div>"
+        "</div>"
+        "<div class='mt-3'>"
+        "<button class='btn btn-primary'>Save Contact</button>"
+        "<a class='btn btn-secondary ms-2' href='/registry/patient/" + str(patient_id) + "/'>Cancel</a>"
+        "</div>"
+        "</form>"
+    )
+    return _wrap("New Emergency Contact", form)
+
+# === Provider credentialing UI & reports (appended by script) ===
+from django.contrib.auth.decorators import login_required
+from django.utils.timezone import now
+from datetime import timedelta
+from django.http import JsonResponse
+
+try:
+    from apps.common.decorators import group_required
+except Exception:
+    def group_required(_n):
+        def _wrap(fn): return fn
+        return _wrap
+
+from .models import Provider, ProviderPayerCredential, Payer
+
+@login_required
+@group_required('Clinician')
+def providers_list(request):
+    rows=[]
+    for pr in Provider.objects.all().order_by('last_name','first_name')[:200]:
+        rows.append(f"<tr><td>{pr.id}</td><td>{pr.last_name}, {pr.first_name}</td><td>{pr.npi or ''}</td>"
+                    f"<td><a href='/registry/provider/{pr.id}/'>View</a></td></tr>")
+    body=("<div class='table-responsive'><table class='table table-sm table-striped'>"
+          "<thead><tr><th>ID</th><th>Name</th><th>NPI</th><th></th></tr></thead>"
+          f"<tbody>{''.join(rows) or '<tr><td colspan=\"4\" class=\"text-muted\">No providers.</td></tr>'}</tbody></table></div>")
+    return _wrap("Providers", body)
+
+@login_required
+@group_required('Clinician')
+def provider_detail(request, provider_id:int):
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr:
+        return _wrap("Provider", "<div class='alert alert-danger'>Provider not found.</div>")
+    creds = ProviderPayerCredential.objects.filter(provider=pr).select_related('payer').order_by('status','payer__name')
+    cred_rows=[]
+    for c in creds:
+        cred_rows.append(f"<tr><td>{c.payer}</td><td>{c.status}</td><td>{c.effective_date or ''}</td>"
+                         f"<td>{c.end_date or ''}</td><td><a href='/registry/credential/{c.id}/edit/'>Edit</a> | <a href='/registry/coverage/{c.id}/eligibility/check'>Check</a></td></tr>")
+    cred_table = ("<div class='table-responsive'><table class='table table-sm table-striped'>"
+                  "<thead><tr><th>Payer</th><th>Status</th><th>Effective</th><th>End</th><th></th></tr></thead>"
+                  f"<tbody>{''.join(cred_rows) or '<tr><td colspan=\"5\" class=\"text-muted\">No credentials.</td></tr>'}</tbody></table></div>")
+    body=(f"<div class='mb-3'><b>{pr.last_name}, {pr.first_name}</b> — NPI: {pr.npi or ''}</div>"
+          f"{cred_table}"
+          f"<a class='btn btn-sm btn-primary' href='/registry/provider/{pr.id}/credential/new/'>Add Credential</a>")
+    return _wrap("Provider", body)
+
+@login_required
+@group_required('Clinician')
+def new_provider_credential(request, provider_id:int):
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr:
+        return _wrap("New Credential", "<div class='alert alert-danger'>Provider not found.</div>")
+    if request.method == "POST":
+        payer_id = (request.POST.get('payer_id') or '').strip()
+        payer = Payer.objects.filter(pk=payer_id).first()
+        if not payer:
+            return _wrap("New Credential", "<div class='alert alert-danger'>Payer not found (use valid ID).</div>")
+        obj = ProviderPayerCredential.objects.create(
+            provider=pr, payer=payer,
+            status=(request.POST.get('status') or 'APPLIED').strip() or 'APPLIED',
+            effective_date=(request.POST.get('effective_date') or None),
+            end_date=(request.POST.get('end_date') or None),
+            contract_id=(request.POST.get('contract_id') or '').strip(),
+            fee_schedule_name=(request.POST.get('fee_schedule_name') or '').strip(),
+            notes=(request.POST.get('notes') or '').strip(),
+        )
+        return HttpResponseRedirect(f"/registry/provider/{pr.id}/")
+    form = (
+      "<form method='post'>"
+      "<div class='row g-2'>"
+      "<div class='col-md-2'><label class='form-label'>Payer ID</label><input name='payer_id' class='form-control' placeholder='e.g., 1'></div>"
+      "<div class='col-md-3'><label class='form-label'>Status</label><input name='status' class='form-control' value='APPLIED'></div>"
+      "<div class='col-md-3'><label class='form-label'>Effective (YYYY-MM-DD)</label><input name='effective_date' class='form-control'></div>"
+      "<div class='col-md-3'><label class='form-label'>End (YYYY-MM-DD)</label><input name='end_date' class='form-control'></div>"
+      "<div class='col-md-3'><label class='form-label'>Contract ID</label><input name='contract_id' class='form-control'></div>"
+      "<div class='col-md-4'><label class='form-label'>Fee Schedule</label><input name='fee_schedule_name' class='form-control'></div>"
+      "<div class='col-md-12'><label class='form-label'>Notes</label><textarea name='notes' class='form-control' rows='3'></textarea></div>"
+      "</div><div class='mt-3'><button class='btn btn-primary'>Save</button>"
+      f"<a class='btn btn-secondary ms-2' href='/registry/provider/{provider_id}/'>Cancel</a></div></form>"
+    )
+    return _wrap("New Credential", form)
+
+@login_required
+@group_required('Clinician')
+def edit_provider_credential(request, credential_id:int):
+    obj = ProviderPayerCredential.objects.filter(pk=credential_id).select_related('provider','payer').first()
+    if not obj:
+        return _wrap("Edit Credential", "<div class='alert alert-danger'>Credential not found.</div>")
+    if request.method == "POST":
+        obj.status=(request.POST.get('status') or obj.status).strip() or obj.status
+        obj.effective_date=(request.POST.get('effective_date') or None)
+        obj.end_date=(request.POST.get('end_date') or None)
+        obj.contract_id=(request.POST.get('contract_id') or '').strip()
+        obj.fee_schedule_name=(request.POST.get('fee_schedule_name') or '').strip()
+        obj.notes=(request.POST.get('notes') or '').strip()
+        obj.save()
+        return HttpResponseRedirect(f"/registry/provider/{obj.provider_id}/")
+    def val(x): return "" if x is None else str(x)
+    form = (
+      "<form method='post'>"
+      "<div class='row g-2'>"
+      f"<div class='col-md-5'><label class='form-label'>Payer</label><input class='form-control' value='{obj.payer}' disabled></div>"
+      f"<div class='col-md-3'><label class='form-label'>Status</label><input name='status' class='form-control' value='{obj.status}'></div>"
+      f"<div class='col-md-2'><label class='form-label'>Effective</label><input name='effective_date' class='form-control' value='{val(obj.effective_date)}'></div>"
+      f"<div class='col-md-2'><label class='form-label'>End</label><input name='end_date' class='form-control' value='{val(obj.end_date)}'></div>"
+      f"<div class='col-md-4'><label class='form-label'>Contract ID</label><input name='contract_id' class='form-control' value='{val(obj.contract_id)}'></div>"
+      f"<div class='col-md-4'><label class='form-label'>Fee Schedule</label><input name='fee_schedule_name' class='form-control' value='{val(obj.fee_schedule_name)}'></div>"
+      f"<div class='col-md-12'><label class='form-label'>Notes</label><textarea name='notes' class='form-control' rows='3'>{val(obj.notes)}</textarea></div>"
+      "</div><div class='mt-3'><button class='btn btn-primary'>Save</button>"
+      f"<a class='btn btn-secondary ms-2' href='/registry/provider/{obj.provider_id}/'>Cancel</a></div></form>"
+    )
+    return _wrap("Edit Credential", form)
+
+@login_required
+@group_required('Clinician')
+def credentialing_expiring(request):
+    cutoff = now().date() + timedelta(days=60)
+    providers = Provider.objects.all()
+    exp_rows = []
+    for pr in providers:
+        flags=[]
+        if pr.license_expiry and pr.license_expiry <= cutoff: flags.append(f"License {pr.license_expiry}")
+        if pr.dea_expiry and pr.dea_expiry <= cutoff: flags.append(f"DEA {pr.dea_expiry}")
+        if pr.malpractice_expiry and pr.malpractice_expiry <= cutoff: flags.append(f"Malpractice {pr.malpractice_expiry}")
+        creds = ProviderPayerCredential.objects.filter(provider=pr, end_date__isnull=False, end_date__lte=cutoff)
+        if creds.exists(): flags.append(f"{creds.count()} credential(s) ending by {cutoff}")
+        if flags:
+            exp_rows.append(f"<tr><td>{pr.last_name}, {pr.first_name}</td><td>{'; '.join(flags)}</td></tr>")
+    body = ("<div class='table-responsive'><table class='table table-sm table-striped'>"
+            "<thead><tr><th>Provider</th><th>Expiring Items (<=60d)</th></tr></thead>"
+            f"<tbody>{''.join(exp_rows) or '<tr><td colspan=\"2\" class=\"text-muted\">Nothing expiring within 60 days.</td></tr>'}</tbody></table></div>")
+    return _wrap("Credentialing - Expiring", body)
+
+@login_required
+def payers_search_json(request):
+    q = (request.GET.get('q') or '').strip()
+    qs = Payer.objects.all()
+    if q:
+        from django.db.models import Q
+        qs = qs.filter(Q(name__icontains=q) | Q(payer_id__icontains=q))
+    data = [{'id': x.pk, 'label': (f"{x.name} ({x.payer_id})" if x.payer_id else x.name)} for x in qs.order_by('name')[:20]]
+    return JsonResponse({'results': data})
+
+# === Provider credentialing UI & reports (appended by script) ===
+from django.contrib.auth.decorators import login_required
+from django.utils.timezone import now
+from datetime import timedelta
+from django.http import JsonResponse
+
+try:
+    from apps.common.decorators import group_required
+except Exception:
+    def group_required(_n):
+        def _wrap(fn): return fn
+        return _wrap
+
+from .models import Provider, ProviderPayerCredential, Payer
+
+@login_required
+@group_required('Clinician')
+def providers_list(request):
+    rows=[]
+    for pr in Provider.objects.all().order_by('last_name','first_name')[:200]:
+        rows.append(f"<tr><td>{pr.id}</td><td>{pr.last_name}, {pr.first_name}</td><td>{pr.npi or ''}</td>"
+                    f"<td><a href='/registry/provider/{pr.id}/'>View</a></td></tr>")
+    body=("<div class='table-responsive'><table class='table table-sm table-striped'>"
+          "<thead><tr><th>ID</th><th>Name</th><th>NPI</th><th></th></tr></thead>"
+          f"<tbody>{''.join(rows) or '<tr><td colspan=\"4\" class=\"text-muted\">No providers.</td></tr>'}</tbody></table></div>")
+    return _wrap("Providers", body)
+
+@login_required
+@group_required('Clinician')
+def provider_detail(request, provider_id:int):
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr:
+        return _wrap("Provider", "<div class='alert alert-danger'>Provider not found.</div>")
+    creds = ProviderPayerCredential.objects.filter(provider=pr).select_related('payer').order_by('status','payer__name')
+    cred_rows=[]
+    for c in creds:
+        cred_rows.append(f"<tr><td>{c.payer}</td><td>{c.status}</td><td>{c.effective_date or ''}</td>"
+                         f"<td>{c.end_date or ''}</td><td><a href='/registry/credential/{c.id}/edit/'>Edit</a> | <a href='/registry/coverage/{c.id}/eligibility/check'>Check</a></td></tr>")
+    cred_table = ("<div class='table-responsive'><table class='table table-sm table-striped'>"
+                  "<thead><tr><th>Payer</th><th>Status</th><th>Effective</th><th>End</th><th></th></tr></thead>"
+                  f"<tbody>{''.join(cred_rows) or '<tr><td colspan=\"5\" class=\"text-muted\">No credentials.</td></tr>'}</tbody></table></div>")
+    body=(f"<div class='mb-3'><b>{pr.last_name}, {pr.first_name}</b> — NPI: {pr.npi or ''}</div>"
+          f"{cred_table}"
+          f"<a class='btn btn-sm btn-primary' href='/registry/provider/{pr.id}/credential/new/'>Add Credential</a>")
+    return _wrap("Provider", body)
+
+@login_required
+@group_required('Clinician')
+def new_provider_credential(request, provider_id:int):
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr:
+        return _wrap("New Credential", "<div class='alert alert-danger'>Provider not found.</div>")
+    if request.method == "POST":
+        payer_id = (request.POST.get('payer_id') or '').strip()
+        payer = Payer.objects.filter(pk=payer_id).first()
+        if not payer:
+            return _wrap("New Credential", "<div class='alert alert-danger'>Payer not found (use valid ID).</div>")
+        obj = ProviderPayerCredential.objects.create(
+            provider=pr, payer=payer,
+            status=(request.POST.get('status') or 'APPLIED').strip() or 'APPLIED',
+            effective_date=(request.POST.get('effective_date') or None),
+            end_date=(request.POST.get('end_date') or None),
+            contract_id=(request.POST.get('contract_id') or '').strip(),
+            fee_schedule_name=(request.POST.get('fee_schedule_name') or '').strip(),
+            notes=(request.POST.get('notes') or '').strip(),
+        )
+        return HttpResponseRedirect(f"/registry/provider/{pr.id}/")
+    form = (
+      "<form method='post'>"
+      "<div class='row g-2'>"
+      "<div class='col-md-2'><label class='form-label'>Payer ID</label><input name='payer_id' class='form-control' placeholder='e.g., 1'></div>"
+      "<div class='col-md-3'><label class='form-label'>Status</label><input name='status' class='form-control' value='APPLIED'></div>"
+      "<div class='col-md-3'><label class='form-label'>Effective (YYYY-MM-DD)</label><input name='effective_date' class='form-control'></div>"
+      "<div class='col-md-3'><label class='form-label'>End (YYYY-MM-DD)</label><input name='end_date' class='form-control'></div>"
+      "<div class='col-md-3'><label class='form-label'>Contract ID</label><input name='contract_id' class='form-control'></div>"
+      "<div class='col-md-4'><label class='form-label'>Fee Schedule</label><input name='fee_schedule_name' class='form-control'></div>"
+      "<div class='col-md-12'><label class='form-label'>Notes</label><textarea name='notes' class='form-control' rows='3'></textarea></div>"
+      "</div><div class='mt-3'><button class='btn btn-primary'>Save</button>"
+      f"<a class='btn btn-secondary ms-2' href='/registry/provider/{provider_id}/'>Cancel</a></div></form>"
+    )
+    return _wrap("New Credential", form)
+
+@login_required
+@group_required('Clinician')
+def edit_provider_credential(request, credential_id:int):
+    obj = ProviderPayerCredential.objects.filter(pk=credential_id).select_related('provider','payer').first()
+    if not obj:
+        return _wrap("Edit Credential", "<div class='alert alert-danger'>Credential not found.</div>")
+    if request.method == "POST":
+        obj.status=(request.POST.get('status') or obj.status).strip() or obj.status
+        obj.effective_date=(request.POST.get('effective_date') or None)
+        obj.end_date=(request.POST.get('end_date') or None)
+        obj.contract_id=(request.POST.get('contract_id') or '').strip()
+        obj.fee_schedule_name=(request.POST.get('fee_schedule_name') or '').strip()
+        obj.notes=(request.POST.get('notes') or '').strip()
+        obj.save()
+        return HttpResponseRedirect(f"/registry/provider/{obj.provider_id}/")
+    def val(x): return "" if x is None else str(x)
+    form = (
+      "<form method='post'>"
+      "<div class='row g-2'>"
+      f"<div class='col-md-5'><label class='form-label'>Payer</label><input class='form-control' value='{obj.payer}' disabled></div>"
+      f"<div class='col-md-3'><label class='form-label'>Status</label><input name='status' class='form-control' value='{obj.status}'></div>"
+      f"<div class='col-md-2'><label class='form-label'>Effective</label><input name='effective_date' class='form-control' value='{val(obj.effective_date)}'></div>"
+      f"<div class='col-md-2'><label class='form-label'>End</label><input name='end_date' class='form-control' value='{val(obj.end_date)}'></div>"
+      f"<div class='col-md-4'><label class='form-label'>Contract ID</label><input name='contract_id' class='form-control' value='{val(obj.contract_id)}'></div>"
+      f"<div class='col-md-4'><label class='form-label'>Fee Schedule</label><input name='fee_schedule_name' class='form-control' value='{val(obj.fee_schedule_name)}'></div>"
+      f"<div class='col-md-12'><label class='form-label'>Notes</label><textarea name='notes' class='form-control' rows='3'>{val(obj.notes)}</textarea></div>"
+      "</div><div class='mt-3'><button class='btn btn-primary'>Save</button>"
+      f"<a class='btn btn-secondary ms-2' href='/registry/provider/{obj.provider_id}/'>Cancel</a></div></form>"
+    )
+    return _wrap("Edit Credential", form)
+
+@login_required
+@group_required('Clinician')
+def credentialing_expiring(request):
+    cutoff = now().date() + timedelta(days=60)
+    providers = Provider.objects.all()
+    exp_rows = []
+    for pr in providers:
+        flags=[]
+        if pr.license_expiry and pr.license_expiry <= cutoff: flags.append(f"License {pr.license_expiry}")
+        if pr.dea_expiry and pr.dea_expiry <= cutoff: flags.append(f"DEA {pr.dea_expiry}")
+        if pr.malpractice_expiry and pr.malpractice_expiry <= cutoff: flags.append(f"Malpractice {pr.malpractice_expiry}")
+        creds = ProviderPayerCredential.objects.filter(provider=pr, end_date__isnull=False, end_date__lte=cutoff)
+        if creds.exists(): flags.append(f"{creds.count()} credential(s) ending by {cutoff}")
+        if flags:
+            exp_rows.append(f"<tr><td>{pr.last_name}, {pr.first_name}</td><td>{'; '.join(flags)}</td></tr>")
+    body = ("<div class='table-responsive'><table class='table table-sm table-striped'>"
+            "<thead><tr><th>Provider</th><th>Expiring Items (<=60d)</th></tr></thead>"
+            f"<tbody>{''.join(exp_rows) or '<tr><td colspan=\"2\" class=\"text-muted\">Nothing expiring within 60 days.</td></tr>'}</tbody></table></div>")
+    return _wrap("Credentialing - Expiring", body)
+
+@login_required
+def payers_search_json(request):
+    q = (request.GET.get('q') or '').strip()
+    qs = Payer.objects.all()
+    if q:
+        from django.db.models import Q
+        qs = qs.filter(Q(name__icontains=q) | Q(payer_id__icontains=q))
+    data = [{'id': x.pk, 'label': (f"{x.name} ({x.payer_id})" if x.payer_id else x.name)} for x in qs.order_by('name')[:20]]
+    return JsonResponse({'results': data})
+
+
+
+def provider_credentialing_json(request, provider_id: int):
+    """Return provider + per-payer credentialing as JSON (no UI)."""
+    from .models import Provider, ProviderPayerCredential
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr:
+        return JsonResponse({"ok": False, "error": "Provider not found"}, status=404)
+
+    # Clean trailing commas/whitespace safely
+    def _clean(s):
+        return (s or '').strip().strip(',').strip()
+
+    last  = _clean(getattr(pr, 'last_name', ''))
+    first = _clean(getattr(pr, 'first_name', ''))
+    if last and first:
+        display_name = f"{last}, {first}"
+    else:
+        display_name = last or first or "Unknown"
+
+    creds = (ProviderPayerCredential.objects
+             .filter(provider=pr)
+             .select_related('payer')
+             .order_by('payer__name'))
+
+    data = {
+        "ok": True,
+        "provider": {
+            "id": pr.id,
+            "name": display_name,
+            "npi": _clean(getattr(pr, 'npi', '')),
+            "license": {
+                "number": _clean(getattr(pr, 'license_number', '')),
+                "state": _clean(getattr(pr, 'license_state', '')),
+                "expiry": str(getattr(pr, 'license_expiry', '') or '') or None,
+            },
+            "dea": {
+                "number": _clean(getattr(pr, 'dea_number', '')),
+                "expiry": str(getattr(pr, 'dea_expiry', '') or '') or None,
+            },
+            "malpractice_expiry": str(getattr(pr, 'malpractice_expiry', '') or '') or None,
+        },
+        "credentials": [
+            {
+                "payer": str(c.payer),
+                "status": c.status,
+                "effective_date": str(c.effective_date) if c.effective_date else None,
+                "end_date": str(c.end_date) if c.end_date else None,
+                "contract_id": c.contract_id,
+                "fee_schedule_name": c.fee_schedule_name,
+            } for c in creds
+        ]
+    }
+    return JsonResponse(data)
+
+@csrf_exempt
+def coverage_check_json(request, pk: int):
+    """POST to update coverage eligibility; returns JSON.
+       Optional JSON body: {"status": "ACTIVE|INACTIVE|NEEDS_UPDATE", "notes": "..."}
+       If not provided, a simple rule is applied based on member_id and effective window.
+    """
+    import json
+    from .models import Coverage
+    try:
+        cov = Coverage.objects.select_related("patient","payer").get(pk=pk)
+    except Coverage.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Coverage not found"}, status=404)
+
+    # Parse JSON or form
+    payload = {}
+    if request.method == "POST" and request.headers.get("Content-Type","").lower().startswith("application/json"):
+        try:
+            payload = json.loads(request.body.decode() or "{}")
+        except Exception:
+            payload = {}
+    else:
+        payload = request.POST
+
+    # If caller supplies a status, use it; else derive one
+    status = (payload.get("status") or "").strip().upper()
+    if status not in ("ACTIVE","INACTIVE","NEEDS_UPDATE"):
+        from datetime import date
+        today = date.today()
+        has_member = bool(cov.member_id)
+        window_ok  = ((cov.effective_start is None or cov.effective_start <= today) and
+                      (cov.effective_end   is None or cov.effective_end   >= today))
+        status = "ACTIVE" if (has_member and window_ok) else ("INACTIVE" if not window_ok else "NEEDS_UPDATE")
+
+    cov.eligibility_status = status
+    cov.eligibility_last_checked = now()
+    # Keep a tiny payload for audit/debug
+    notes = (payload.get("notes") or "").strip()
+    cov.eligibility_payload = {
+        "source": "eligibility-json",
+        "notes": notes,
+        "member_id": cov.member_id,
+        "checked_at": cov.eligibility_last_checked.isoformat()
+    }
+    cov.save(update_fields=["eligibility_status", "eligibility_last_checked", "eligibility_payload"])
+    log_event(request.user, 'eligibility-check-json', 'Coverage', cov.id, {'status': cov.eligibility_status})
+
+    return JsonResponse({
+        "ok": True,
+        "coverage_id": cov.id,
+        "status": cov.eligibility_status,
+        "last_checked": cov.eligibility_last_checked.isoformat(),
+        "payload": cov.eligibility_payload
+    })
+
+
+def provider_licenses_json(request, provider_id: int):
+    from .models import Provider, ProviderLicense
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr: return JsonResponse({"ok": False, "error": "Provider not found"}, status=404)
+    rows = [{"id": lic.id, "state": lic.state, "number": lic.number,
+             "type": lic.license_type, "expiry": str(lic.expiry) if lic.expiry else None,
+             "notes": lic.notes}
+            for lic in ProviderLicense.objects.filter(provider=pr).order_by('state','expiry')]
+    return JsonResponse({"ok": True, "provider_id": pr.id, "licenses": rows})
+
+
+def provider_dea_json(request, provider_id: int):
+    from .models import Provider, ProviderDEARegistration
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr: return JsonResponse({"ok": False, "error": "Provider not found"}, status=404)
+    rows = [{"id": r.id, "dea_number": r.dea_number, "schedules": list(r.schedules or []),
+             "expiry": str(r.expiry) if r.expiry else None, "notes": r.notes}
+            for r in ProviderDEARegistration.objects.filter(provider=pr).order_by('expiry')]
+    return JsonResponse({"ok": True, "provider_id": pr.id, "dea": rows})
+
+
+def provider_payers_json(request, provider_id: int):
+    from .models import Provider, ProviderPayerCredential
+    pr = Provider.objects.filter(pk=provider_id).first()
+    if not pr: return JsonResponse({"ok": False, "error": "Provider not found"}, status=404)
+    rows = []
+    for c in ProviderPayerCredential.objects.filter(provider=pr).select_related('payer').order_by('payer__name'):
+        rows.append({"payer": str(c.payer), "status": c.status,
+                     "network_status": c.network_status, "network_name": c.network_name,
+                     "plan_id": c.plan_id, "plan_name": c.plan_name,
+                     "effective_date": str(c.effective_date) if c.effective_date else None,
+                     "end_date": str(c.end_date) if c.end_date else None,
+                     "last_verified": str(c.last_verified) if c.last_verified else None,
+                     "reminder_date": str(c.reminder_date) if c.reminder_date else None,
+                     "fee_schedule_name": c.fee_schedule_name})
+    return JsonResponse({"ok": True, "provider_id": pr.id, "payers": rows})
+
+def coverage_check_and_back(request, pk: int):
+    """GET -> update eligibility quickly, then redirect to patient registry summary."""
+    from datetime import date
+    from .models import Coverage
+    try:
+        cov = Coverage.objects.select_related("patient","payer").get(pk=pk)
+    except Coverage.DoesNotExist:
+        return HttpResponseRedirect("/registry/patient/1/")  # safe fallback
+    today = date.today()
+    has_member = bool(cov.member_id)
+    window_ok = ((cov.effective_start is None or cov.effective_start <= today) and (cov.effective_end is None or cov.effective_end >= today))
+    status = "ACTIVE" if (has_member and window_ok) else ("INACTIVE" if not window_ok else "NEEDS_UPDATE")
+    cov.eligibility_status = status
+    cov.eligibility_last_checked = now()
+    cov.eligibility_payload = {"source":"eligibility-oneclick","member_id": cov.member_id, "checked_at": cov.eligibility_last_checked.isoformat()}
+    cov.save(update_fields=["eligibility_status","eligibility_last_checked","eligibility_payload"])
+    log_event(request.user, 'eligibility-check', 'Coverage', cov.id, {'status': cov.eligibility_status})
+    return HttpResponseRedirect(f"/registry/patient/{cov.patient_id}/")
+
+
+def coverage_list_json(request):
+    from .models import Coverage
+    pid = (request.GET.get("patient_id") or "").strip()
+    qs = Coverage.objects.all().order_by("-is_primary","priority","id")[:50]
+    if pid.isdigit():
+        qs = qs.filter(patient_id=int(pid))[:50]
+    items = [{"id": c.id, "patient_id": c.patient_id, "payer": str(c.payer), "member_id": c.member_id, "is_primary": c.is_primary} for c in qs]
+    return JsonResponse({"ok": True, "count": len(items), "items": items})
+
+from apps.registry.models import Facility as DbFacility
+from apps.registry.models import ProviderFacility as DbPF
+from apps.registry.models import Provider as DbProvider
+
+
+def facility_list_json(request):
+    qs = DbFacility.objects.all().order_by('name')[:100]
+    items = [{"id": f.id, "name": f.name, "type": getattr(f,'type','') or ''} for f in qs]
+    return JsonResponse({"ok": True, "count": len(items), "items": items})
+
+
+@csrf_exempt
+def provider_facility_link_json(request, provider_id: int):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error":"Use POST"}, status=405)
+    fid = (request.GET.get("facility_id") or request.POST.get("facility_id") or "").strip()
+    if not fid.isdigit():
+        return JsonResponse({"ok": False, "error":"facility_id required"}, status=400)
+    pr = DbProvider.objects.filter(pk=provider_id).first()
+    fac = DbFacility.objects.filter(pk=int(fid)).first()
+    if not pr or not fac:
+        return JsonResponse({"ok": False, "error":"Provider or Facility not found"}, status=404)
+    pf, _ = DbPF.objects.get_or_create(provider=pr, facility=fac)
+    return JsonResponse({"ok": True, "link_id": pf.id})
+
+
+@csrf_exempt
+def provider_facility_unlink_json(request, provider_id: int):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error":"Use POST"}, status=405)
+    fid = (request.GET.get("facility_id") or request.POST.get("facility_id") or "").strip()
+    if not fid.isdigit():
+        return JsonResponse({"ok": False, "error":"facility_id required"}, status=400)
+    cnt = DbPF.objects.filter(provider_id=provider_id, facility_id=int(fid)).delete()[0]
+    return JsonResponse({"ok": True, "deleted": cnt})
+
+
+def audit_recent_json(request):
+    from apps.audit.models import AuditEvent
+    try:
+        limit = int(request.GET.get('limit','50'))
+    except Exception:
+        limit = 50
+    qs = AuditEvent.objects.select_related('user').order_by('-when')[:limit]
+    items = []
+    for ev in qs:
+        items.append({
+            "when": ev.when.isoformat(),
+            "user": getattr(ev.user,'username',None),
+            "action": ev.action,
+            "model": ev.model,
+            "object_id": ev.object_id,
+            "meta": ev.meta or {}
+        })
+    return JsonResponse({"ok": True, "count": len(items), "items": items})

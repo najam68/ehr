@@ -1,0 +1,42 @@
+- model: clinical_directory.caresetting
+  pk: nursing-home-snf
+  fields:
+    title: "Nursing Home (SNF)"
+    slug: "nursing-home-snf"
+    pos_codes: ["31"]
+    description: "Short-stay rehab and skilled care"
+    active: true
+- model: clinical_directory.caresetting
+  pk: nursing-facility-ltc
+  fields:
+    title: "Nursing Facility (Long-term care)"
+    slug: "nursing-facility-ltc"
+    pos_codes: ["32"]
+    description: "Custodial long-term care"
+    active: true
+- model: clinical_directory.caresetting
+  pk: home-health-agency
+  fields:
+    title: "Home Health Agency (HHA)"
+    slug: "home-health-agency"
+    pos_codes: ["12"]
+    description: "Skilled home services"
+    active: true
+- model: clinical_directory.caresetting
+  pk: hospice-home
+  fields:
+    title: "Hospice (Home)"
+    slug: "hospice-home"
+    pos_codes: ["34","12"]
+    description: "Home hospice services"
+    active: true
+- model: clinical_directory.caresetting
+  pk: ambulatory-surgery-center
+  fields:
+    title: "Ambulatory Surgery Center (ASC)"
+    slug: "ambulatory-surgery-center"
+    pos_codes: ["24"]
+    description: "Facility for same-day surgeries"
+    active: true
+
+# provenance: curated seed list based on US care settings & POS conventions.

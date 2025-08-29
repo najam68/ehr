@@ -1,0 +1,25 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<h1 class="h4 mb-3">Patients</h1>
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead><tr><th>ID</th><th>Last</th><th>First</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for p in patients %}
+      <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.last_name }}</td>
+        <td>{{ p.first_name }}</td>
+        <td>
+          <a class="btn btn-outline-primary btn-sm" href="/claims/?patient={{ p.id }}">View Claims</a>
+         <a class="btn btn-outline-secondary btn-sm" href="/emr/p/{{ p.id }}/">Open Chart</a>
+
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="text-muted">No patients yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<h1 class="h4 mb-3">Chart • {{ patient.last_name }}, {{ patient.first_name }}</h1>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card mb-3"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted">DOB</div>
+          <div>{{ patient.date_of_birth }}</div>
+        </div>
+        <div>
+          <a class="btn btn-primary" href="{% url 'emr-new-encounter' patient.id %}">New Encounter</a>
+        </div>
+      </div>
+    </div></div>
+
+    <div class="card mb-3"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h6 m-0">Encounters</h2>
+      </div>
+      <ul class="list-group">
+        {% for e in encounters %}
+          <li class="list-group-item d-flex justify-content-between">
+            <div>
+              <div><a href="{% url 'emr-encounter' e.id %}">#{{ e.id }}</a> • {{ e.start|date:"Y-m-d H:i" }} • {{ e.reason|default:"Encounter" }}</div>
+              <div class="text-muted">Status: {{ e.status }}{% if e.location %} • {{ e.location }}{% endif %}</div>
+            </div>
+            <div class="text-end">
+              {% with v=e.vitals.all|first %}
+                {% if v %}<div class="small text-muted">BP {{ v.bp_systolic }}/{{ v.bp_diastolic }} • P {{ v.pulse_bpm }}</div>{% endif %}
+              {% endwith %}
+            </div>
+          </li>
+        {% empty %}
+          <li class="list-group-item text-muted">No encounters yet.</li>
+        {% endfor %}
+      </ul>
+    </div></div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3"><div class="card-body">
+      <h2 class="h6 mb-2">Latest Vitals</h2>
+      {% if last_vital %}
+        <div class="small">
+          BP {{ last_vital.bp_systolic }}/{{ last_vital.bp_diastolic }} •
+          P {{ last_vital.pulse_bpm }} •
+          T {{ last_vital.temp_c }} °C •
+          SpO₂ {{ last_vital.spo2 }}%
+        </div>
+      {% else %}
+        <div class="text-muted">No vitals yet.</div>
+      {% endif %}
+    </div></div>
+
+    <div class="card mb-3"><div class="card-body">
+      <h2 class="h6 mb-2">Problems</h2>
+      <ul class="small m-0 ps-3">
+        {% for pr in problems %}<li>{{ pr.display }}{% if pr.code %} ({{ pr.code_system }} {{ pr.code }}){% endif %}</li>{% empty %}
+          <li class="text-muted">No problems.</li>
+        {% endfor %}
+      </ul>
+    </div></div>
+
+    <div class="card mb-3"><div class="card-body">
+      <h2 class="h6 mb-2">Medications</h2>
+      <ul class="small m-0 ps-3">
+        {% for m in meds %}<li>{{ m.name }} {{ m.dose }} {{ m.route }} {{ m.frequency }}</li>{% empty %}
+          <li class="text-muted">No medications.</li>
+        {% endfor %}
+      </ul>
+    </div></div>
+
+    <div class="card"><div class="card-body">
+      <h2 class="h6 mb-2">Allergies</h2>
+      <ul class="small m-0 ps-3">
+        {% for a in allergies %}<li>{{ a.substance }}{% if a.reaction %} — {{ a.reaction }}{% endif %}</li>{% empty %}
+          <li class="text-muted">No allergies.</li>
+        {% endfor %}
+      </ul>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

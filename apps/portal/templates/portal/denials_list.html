@@ -1,0 +1,20 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<h1 class="h4 mb-3">Denials</h1>
+<table class="table table-sm table-striped align-middle">
+  <thead><tr><th>ID</th><th>Claim</th><th>CARC</th><th>RARC</th><th>Reason</th><th>Status</th><th>Created</th></tr></thead>
+  <tbody>
+    {% for d in rows %}
+    <tr>
+      <td><a href="/portal/denials/{{ d.id }}/">{{ d.id }}</a></td>
+      <td><a href="/portal/claims/{{ d.claim_id }}/">#{{ d.claim_id }}</a></td>
+      <td>{{ d.carc_code }}</td>
+      <td>{{ d.rarc_code }}</td>
+      <td>{{ d.reason }}</td>
+      <td>{{ d.status }}</td>
+      <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

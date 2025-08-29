@@ -1,0 +1,75 @@
+from django.db import models
+
+class Claim(models.Model):
+    patient_id = models.IntegerField()  # simplify FK
+    encounter_id = models.IntegerField(null=True, blank=True)  # placeholder
+    payer_name = models.CharField(max_length=120)
+    billing_provider_npi = models.CharField(max_length=10)
+    rendering_provider_npi = models.CharField(max_length=10)
+    facility_name = models.CharField(max_length=160, blank=True)
+    pos = models.CharField(max_length=2)  # place of service
+    auth_number = models.CharField(max_length=40, blank=True)
+    status = models.CharField(max_length=24, default="DRAFT")  # DRAFT/READY/SENT/ACCEPTED/PAID/DENIED
+    total_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    claim_control_number = models.CharField(max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class ClaimLine(models.Model):
+    claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="lines")
+    cpt = models.CharField(max_length=10)
+    modifiers = models.JSONField(default=list, blank=True)
+    units = models.DecimalField(max_digits=7, decimal_places=2, default=1)
+    diagnosis_pointers = models.JSONField(default=list, blank=True)  # indexes referencing claim diagnoses
+    charge = models.DecimalField(max_digits=10, decimal_places=2)
+    npi_override = models.CharField(max_length=10, blank=True)
+
+class Diagnosis(models.Model):
+    claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="diagnoses")
+    code = models.CharField(max_length=8)  # ICD-10-CM
+    order = models.PositiveSmallIntegerField()
+
+class ScrubFinding(models.Model):
+    claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="findings")
+    code = models.CharField(max_length=32)  # e.g., NCCI_PAIR, MUE_EXCEEDED
+    severity = models.CharField(max_length=8)  # ERROR/WARN
+    message = models.TextField()
+    line = models.ForeignKey(ClaimLine, null=True, blank=True, on_delete=models.SET_NULL)
+    suggestion = models.TextField(blank=True)
+
+# --- Edits data (stubs) ---
+
+class MUE(models.Model):
+    code = models.CharField(max_length=20, unique=True)        # CPT/HCPCS
+    max_units = models.DecimalField(max_digits=7, decimal_places=2)
+
+class NCCIEdit(models.Model):
+    code_primary = models.CharField(max_length=20)             # Column 1
+    code_secondary = models.CharField(max_length=20)           # Column 2
+    edit_type = models.CharField(max_length=20, default="PAIR")  # PAIR/MUTEX
+    class Meta:
+        unique_together = [("code_primary", "code_secondary", "edit_type")]
+
+# --- Audit log for auto-fix ---
+
+class AutoFixAudit(models.Model):
+    ACTIONS = (("preview","preview"), ("apply","apply"))
+    claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="autofix_audits")
+    action = models.CharField(max_length=12, choices=ACTIONS)
+    flags = models.JSONField(default=dict, blank=True)       # snapshot of settings flags
+    proposed = models.JSONField(default=list, blank=True)    # proposed changes
+    committed = models.JSONField(default=list, blank=True)   # actually applied
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+# --- EDI export log ---
+
+class EdiExport(models.Model):
+    STATUS = (("QUEUED","QUEUED"), ("SENT","SENT"), ("FAILED","FAILED"))
+    claim = models.ForeignKey(Claim, on_delete=models.CASCADE, related_name="edi_exports")
+    file_path = models.CharField(max_length=300)
+    sha256 = models.CharField(max_length=64)
+    interchange_id = models.CharField(max_length=30, blank=True)  # ISA13 (optional later)
+    functional_id = models.CharField(max_length=30, blank=True)   # GS06 (optional later)
+    status = models.CharField(max_length=10, choices=STATUS, default="QUEUED")
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)

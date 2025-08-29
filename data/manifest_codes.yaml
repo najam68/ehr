@@ -1,0 +1,32 @@
+datasets:
+  - id: icd10cm_codes
+    description: "ICD-10-CM sample codes"
+    source:
+      system: "CDC/NCHS"
+      url: "https://www.cdc.gov/nchs/icd/"
+      local_path: "data/sources/icd10cm_sample.csv"
+    format: "CSV"
+    target:
+      app: "codes"
+      model: "Code"
+      key_fields: ["code","system_id"]
+      mapping:
+        code: "code"
+        display: "display"
+        system_id: "system"
+
+  - id: hcpcs_codes
+    description: "HCPCS sample codes"
+    source:
+      system: "CMS"
+      url: "https://www.cms.gov/medicare/coding/medhcpcsgeninfo"
+      local_path: "data/sources/hcpcs_sample.csv"
+    format: "CSV"
+    target:
+      app: "codes"
+      model: "Code"
+      key_fields: ["code","system_id"]
+      mapping:
+        code: "code"
+        display: "display"
+        system_id: "system"

@@ -1,0 +1,30 @@
+from django.contrib import admin
+from django.urls import path, include
+from django.views.generic import TemplateView
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("", TemplateView.as_view(template_name="dashboard/index.html"), name="home"),
+]
+
+# Optional app urls (only if importable)
+try:
+    import apps.patients.urls  # type: ignore
+    urlpatterns += [path("patients/", include("apps.patients.urls"))]
+except Exception:
+    pass
+
+try:
+    import apps.claims.urls  # type: ignore
+    urlpatterns += [path("claims/", include("apps.claims.urls"))]
+except Exception:
+    pass
+
+try:
+    import apps.api.urls  # type: ignore
+    urlpatterns += [path("api/", include("apps.api.urls"))]
+except Exception:
+    pass
+
+# FHIR routes (always on after we add the package)
+urlpatterns += [path("fhir/", include("apps.fhir_api.urls"))]

@@ -1,0 +1,21 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<h1 class="h4 mb-3">Dashboard</h1>
+<div class="row g-3">
+  <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+    <div class="text-muted">Patients</div><div class="fs-4">{{ counts.patients }}</div>
+  </div></div></div>
+  <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+    <div class="text-muted">Coverages</div><div class="fs-4">{{ counts.coverages }}</div>
+  </div></div></div>
+  <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+    <div class="text-muted">Claims</div><div class="fs-4">{{ counts.claims }}</div>
+  </div></div></div>
+  <div class="col-6 col-md-3"><div class="card"><div class="card-body">
+    <div class="text-muted">Exports</div><div class="fs-4">{{ counts.exports }}</div>
+  </div></div></div>
+</div>
+<div class="mt-4"><div class="card"><div class="card-body">
+  <div class="text-muted">Blocking Errors</div><div class="fs-5">{{ counts.errors }}</div>
+</div></div></div>
+{% endblock %}

@@ -1,0 +1,47 @@
+datasets:
+  - id: nucc_taxonomy
+    description: "NUCC provider taxonomy (sample subset for demo)"
+    source:
+      system: "NUCC"
+      url: "https://nucc.org/healthcare-provider-taxonomy"  # reference only
+      local_path: "data/sources/nucc_sample.csv"
+    format: "CSV"
+    target:
+      app: "clinical_directory"
+      model: "Specialty"
+      key_fields: ["slug"]
+      mapping:
+        title: "Classification"
+        slug: "Taxonomy"
+        nucc_code: "Taxonomy"
+  - id: cms_pos_codes
+    description: "CMS Place of Service (sample)"
+    source:
+      system: "CMS"
+      url: "https://www.cms.gov/Medicare/Coding/place-of-service-codes/Place_of_Service_Code_Set"
+      local_path: "data/sources/cms_pos_sample.csv"
+    format: "CSV"
+    target:
+      app: "clinical_directory"
+      model: "CareSetting"
+      key_fields: ["slug"]
+      mapping:
+        title: "Place of Service Name"
+        slug: "Place of Service Name"
+        pos_codes: "POS Code"
+        description: "Place of Service Description"
+  - id: payer_directory_seed
+    description: "Seed payer directory (demo only)"
+    source:
+      system: "Seed"
+      url: "N/A"
+      local_path: "data/sources/payers_sample.csv"
+    format: "CSV"
+    target:
+      app: "clinical_directory"
+      model: "Clinic"
+      key_fields: ["slug"]
+      mapping:
+        name: "Name"
+        slug: "Slug"
+        website: "Website"

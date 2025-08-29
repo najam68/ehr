@@ -1,0 +1,15 @@
+{% extends "portal/base.html" %}
+{% block content %}
+<h1 class="h4 mb-3">Portal SPA (live)</h1>
+<div id="app" class="small text-muted">Loading…</div>
+<script>
+(async ()=>{
+  const base = location.origin;
+  const wq = await (await fetch(`${base}/api/claims/workqueue/?rescrub=1`)).json();
+  const dn = await (await fetch(`${base}/api/claims/denials/`)).json();
+  document.getElementById('app').innerHTML =
+    `<h6>Workqueue</h6><pre>${JSON.stringify(wq,null,2)}</pre>
+     <h6>Denials</h6><pre>${JSON.stringify(dn,null,2)}</pre>`;
+})();
+</script>
+{% endblock %}

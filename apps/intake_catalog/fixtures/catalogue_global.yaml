@@ -1,0 +1,51 @@
+- model: intake_catalog.field
+  pk: demo.first_name
+  fields:
+    id_stable: "demo.first_name"
+    label: "First name"
+    ui_type: "text"
+    intake_steps: ["schedule","previsit","checkin"]
+    required: "Y"
+    fhir_map: "Patient.name.given"
+    order: 10
+- model: intake_catalog.field
+  pk: demo.last_name
+  fields:
+    id_stable: "demo.last_name"
+    label: "Last name"
+    ui_type: "text"
+    intake_steps: ["schedule","previsit","checkin"]
+    required: "Y"
+    fhir_map: "Patient.name.family"
+    order: 11
+- model: intake_catalog.field
+  pk: demo.date_of_birth
+  fields:
+    id_stable: "demo.date_of_birth"
+    label: "Date of birth"
+    ui_type: "date"
+    intake_steps: ["schedule","previsit","checkin"]
+    required: "Y"
+    fhir_map: "Patient.birthDate"
+    order: 12
+- model: intake_catalog.field
+  pk: insurance.primary.member_id
+  fields:
+    id_stable: "insurance.primary.member_id"
+    label: "Member ID"
+    ui_type: "text"
+    intake_steps: ["schedule","previsit"]
+    required: "C"
+    fhir_map: "Coverage.subscriberId"
+    order: 100
+- model: intake_catalog.field
+  pk: history.chief_complaint
+  fields:
+    id_stable: "history.chief_complaint"
+    label: "Chief complaint"
+    ui_type: "text"
+    intake_steps: ["checkin"]
+    required: "C"
+    fhir_map: "Encounter.reasonCode"
+    order: 200
+# provenance: starter catalogue based on our canvas global baseline.

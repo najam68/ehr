@@ -1,0 +1,22 @@
+from django.urls import path
+from .views import (
+    patient_registry_summary,
+    edit_patient_profile,
+    new_coverage,
+    edit_coverage,
+    new_emergency_contact,
+)
+
+urlpatterns = [
+    path('payers/search_json/', payers_search_json, name='registry-payers-search'),
+    path('credentialing/expiring/', credentialing_expiring, name='registry-credentialing-expiring'),
+    path('credential/<int:credential_id>/edit/', edit_provider_credential, name='registry-edit-provider-credential'),
+    path('provider/<int:provider_id>/credential/new/', new_provider_credential, name='registry-new-provider-credential'),
+    path('provider/<int:provider_id>/', provider_detail, name='registry-provider'),
+    path('providers/', providers_list, name='registry-providers'),
+    path("patient/<int:patient_id>/", patient_registry_summary, name="registry-patient-summary"),
+    path("patient/<int:patient_id>/profile/edit/", edit_patient_profile, name="registry-edit-profile"),
+    path("patient/<int:patient_id>/coverage/new/", new_coverage, name="registry-new-coverage"),
+    path("coverage/<int:coverage_id>/edit/", edit_coverage, name="registry-edit-coverage"),
+    path("patient/<int:patient_id>/contact/new/", new_emergency_contact, name="registry-new-contact"),
+]

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Denials Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial; margin:24px; color:#111; background:#fff; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:16px; max-width:1200px; }
+    .card { border:1px solid #e5e7eb; border-radius:12px; padding:16px 18px; }
+    h2 { margin:0 0 10px; font-size:18px; }
+    .muted { color:#6b7280; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#f3f4f6; font-size:12px; }
+    .row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f3f4f6; }
+    .row:last-child { border-bottom:none; }
+    input { width:100%; padding:8px 10px; border:1px solid #e5e7eb; border-radius:10px; }
+    button { padding:8px 10px; border:1px solid #e5e7eb; background:#fafafa; border-radius:10px; cursor:pointer; }
+    a { color:#2563eb; text-decoration:none; } a:hover{ text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="grid">
+
+    <!-- Quick Actions -->
+    <div class="card">
+      <h2>Quick Actions</h2>
+      <form action="/claims/find/" method="get" style="margin-top:8px;">
+        <label class="muted" for="claim_id">Open Claim by ID</label>
+        <div style="display:flex; gap:8px; margin-top:6px;">
+          <input id="claim_id" name="claim_id" type="number" min="1" placeholder="e.g. 1" required />
+          <button type="submit">Go</button>
+        </div>
+      </form>
+      <div style="margin-top:10px;">
+        <a href="/claims/1/denials/">Sample: Claim 1 denials →</a>
+      </div>
+    </div>
+
+    <!-- Status Summary -->
+    <div class="card">
+      <h2>Status Summary</h2>
+      <div class="muted" style="margin-bottom:6px;">Current counts by status</div>
+      {% for s in summary %}
+        <div class="row">
+          <div><span class="pill">{{ s.status }}</span></div>
+          <strong>{{ s.count }}</strong>
+        </div>
+      {% empty %}
+        <div class="muted">No denials yet.</div>
+      {% endfor %}
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card">
+      <h2>Recent Activity</h2>
+      <div class="muted" style="margin-bottom:6px;">Latest status changes</div>
+      {% if recent %}
+        {% for h in recent %}
+          <div class="row">
+            <div>
+              <div>Denial #{{ h.denial_id }} → <strong>{{ h.to_status }}</strong></div>
+              <div class="muted" style="font-size:12px;">{{ h.created_at|date:"Y-m-d H:i" }}</div>
+              {% if h.note %}<div style="margin-top:4px;">“{{ h.note }}”</div>{% endif %}
+            </div>
+            <div><a href="/claims/denials/{{ h.denial_id }}/">View →</a></div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="muted">Nothing yet.</div>
+      {% endif %}
+    </div>
+
+    <!-- Recent Denials -->
+    <div class="card">
+      <h2>Recent Denials</h2>
+      <div class="muted" style="margin-bottom:6px;">Newest by ID</div>
+      {% if recent_denials %}
+        {% for d in recent_denials %}
+          <div class="row">
+            <div>
+              <div><span class="pill">{{ d.status }}</span> <strong>#{{ d.id }}</strong></div>
+              <div class="muted" style="font-size:12px;">Claim {{ d.claim_id }}{% if d.reason %} • {{ d.reason }}{% endif %}</div>
+            </div>
+            <div><a href="/claims/denials/{{ d.id }}/">Detail →</a></div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="muted">No denials found.</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <div style="margin-top:16px;">
+    <a href="/portal/">← Back to portal</a>
+  </div>
+</body>
+</html>

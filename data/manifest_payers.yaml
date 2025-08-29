@@ -1,0 +1,23 @@
+datasets:
+  - id: payer_directory
+    description: "Payer directory (sample)"
+    source:
+      system: "Seed"
+      url: "N/A"
+      local_path: "data/sources/payers_directory.csv"
+    format: "CSV"
+    target:
+      app: "rcm"
+      model: "Payer"
+      key_fields: ["slug"]
+      mapping:
+        slug: "slug"
+        display_name: "display_name"
+        naic_code: "naic_code"
+        payer_id: "payer_id"
+        trading_partner_id: "trading_partner_id"
+        edi_eligibility_receiver_id: "edi_eligibility_receiver_id"
+        edi_claim_receiver_id: "edi_claim_receiver_id"
+        pa_portal_url: "pa_portal_url"
+        claims_portal_url: "claims_portal_url"
+        service_states: "service_states"

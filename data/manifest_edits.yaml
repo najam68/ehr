@@ -1,0 +1,31 @@
+datasets:
+  - id: mue_stub
+    description: "Demo MUE table (max units per DOS)"
+    source:
+      system: "Demo"
+      url: "N/A"
+      local_path: "data/sources/mue_stub.csv"
+    format: "CSV"
+    target:
+      app: "claims"
+      model: "MUE"
+      key_fields: ["code"]
+      mapping:
+        code: "code"
+        max_units: "max_units"
+
+  - id: ncci_stub
+    description: "Demo NCCI pairs"
+    source:
+      system: "Demo"
+      url: "N/A"
+      local_path: "data/sources/ncci_stub.csv"
+    format: "CSV"
+    target:
+      app: "claims"
+      model: "NCCIEdit"
+      key_fields: ["code_primary","code_secondary","edit_type"]
+      mapping:
+        code_primary: "code_primary"
+        code_secondary: "code_secondary"
+        edit_type: "edit_type"

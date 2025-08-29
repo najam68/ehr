@@ -1,0 +1,36 @@
+from django.contrib import admin
+from .models import Provider, Appointment
+
+@admin.register(Provider)
+class ProviderAdmin(admin.ModelAdmin):
+    list_display = ("last_name", "first_name", "npi")
+    search_fields = ("last_name", "first_name", "npi")
+
+@admin.register(Appointment)
+class AppointmentAdmin(admin.ModelAdmin):
+    # Use method accessors to avoid admin.E108
+    list_display = ("id", "patient", "provider_name", "start_dt", "end_dt", "reason_text")
+    search_fields = ("patient_id", "reason")
+
+    @admin.display(description="Patient")
+    def patient(self, obj):
+        return obj.patient_id
+
+    @admin.display(description="Provider")
+    def provider_name(self, obj):
+        try:
+            return f"{obj.provider.last_name}, {obj.provider.first_name}"
+        except Exception:
+            return "(none)"
+
+    @admin.display(description="Start")
+    def start_dt(self, obj):
+        return obj.start
+
+    @admin.display(description="End")
+    def end_dt(self, obj):
+        return obj.end
+
+    @admin.display(description="Reason")
+    def reason_text(self, obj):
+        return obj.reason

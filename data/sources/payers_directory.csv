@@ -1,0 +1,4 @@
+slug,display_name,naic_code,payer_id,trading_partner_id,edi_eligibility_receiver_id,edi_claim_receiver_id,pa_portal_url,claims_portal_url,service_states
+unitedhealthcare,UnitedHealthcare,12345,UHC,claimrev-uhc,SAMPLE271,UHC837,https://uhc.com/pa,https://uhc.com/claims,"[\"IL\",\"IN\",\"WI\"]"
+aetna,Aetna,,AETNA,claimrev-aetna,SAMPLE271,AETNA837,https://aetna.com/pa,https://aetna.com/claims,"[\"IL\",\"MI\"]"
+bcbs-il,Blue Cross Blue Shield of IL,55204,BCBSIL,claimrev-bcbs,SAMPLE271,BCBS837,https://bcbsil.com/pa,https://bcbsil.com/claims,"[\"IL\"]"
